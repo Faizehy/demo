@@ -97,6 +97,15 @@ export function templatesEqual(a: SplitTemplate, b: SplitTemplate): boolean {
   );
 }
 
+export function extractTemplates(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object' && value !== null) {
+    const envelope = value as { templates?: unknown };
+    return Array.isArray(envelope.templates) ? envelope.templates : undefined;
+  }
+  return undefined;
+}
+
 /**
  * Resolve an import against the current template list.
  *
@@ -169,27 +178,16 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
 
   // Load templates from localStorage on mount and sync across tabs
   useEffect(() => {
-  useEffect(() => {
-    // Define the extractor function that develop branch added
-    const extractTemplates = (value: unknown) => {
-      if (Array.isArray(value)) return value;
-      if (typeof value === 'object' && value !== null) {
-        const envelope = value as { templates?: unknown };
-        return Array.isArray(envelope.templates) ? envelope.templates : undefined;
-      }
-      return undefined;
-    };
-
     const load = () => {
       try {
         setTemplates(
-          readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates)
+          readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates),
         );
       } catch {
         // Ignore parse errors
       }
     };
-    
+
     load();
 
     const handleStorage = (e: StorageEvent) => {
@@ -198,7 +196,7 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
           try {
             // Use the versioned reader when the storage event fires
             setTemplates(
-              readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates)
+              readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates),
             );
           } catch {}
         } else {
@@ -213,7 +211,6 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-
   const saveTemplate = (name: string, rows: TemplateRow[]) => {
     const now = Date.now();
     const newTemplate: SplitTemplate = {
@@ -226,14 +223,15 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     setTemplates((prev: SplitTemplate[]) => {
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(
+          localStorage,
+          STORAGE_KEY,
+          isValidTemplate,
+          extractTemplates,
+        );
       } catch {}
       const next = [...currentStore, newTemplate];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeVersioned(localStorage, STORAGE_KEY, next);
       return next;
     });
     return newTemplate;
@@ -243,16 +241,17 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     setTemplates((prev: SplitTemplate[]) => {
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(
+          localStorage,
+          STORAGE_KEY,
+          isValidTemplate,
+          extractTemplates,
+        );
       } catch {}
       const next = currentStore.map((t) =>
         t.id === id ? { ...t, name, updatedAt: Date.now() } : t,
       );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeVersioned(localStorage, STORAGE_KEY, next);
       return next;
     });
   };
@@ -261,14 +260,15 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     setTemplates((prev: SplitTemplate[]) => {
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(
+          localStorage,
+          STORAGE_KEY,
+          isValidTemplate,
+          extractTemplates,
+        );
       } catch {}
       const next = currentStore.filter((t) => t.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeVersioned(localStorage, STORAGE_KEY, next);
       return next;
     });
   };
@@ -277,11 +277,12 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     setTemplates((prev: SplitTemplate[]) => {
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(
+          localStorage,
+          STORAGE_KEY,
+          isValidTemplate,
+          extractTemplates,
+        );
       } catch {}
 
       const original = currentStore.find((t) => t.id === id);
@@ -295,7 +296,7 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
         updatedAt: now,
       };
       const next = [...currentStore, copy];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeVersioned(localStorage, STORAGE_KEY, next);
       return next;
     });
   };
@@ -315,7 +316,7 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     // Throws on invalid JSON / shape (see resolveTemplateImport) so the
     // caller can show a real error instead of a silent no-op.
     const result = resolveTemplateImport(templates, json, overwriteConflicts);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result.next));
+    writeVersioned(localStorage, STORAGE_KEY, result.next);
     setTemplates(result.next);
     return { imported: result.imported, skipped: result.skipped, conflicts: result.conflicts };
   };

@@ -109,22 +109,15 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-    });
-  }, []);
-
   const removeContact = useCallback((address: string) => {
     setContacts((prev: Contact[]) => {
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(localStorage, STORAGE_KEY, isContact);
       } catch {}
 
       const next = currentStore.filter((c) => c.address !== address);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      writeVersioned(localStorage, STORAGE_KEY, next);
       return next;
     });
   }, []);
