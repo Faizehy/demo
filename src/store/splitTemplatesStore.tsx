@@ -159,22 +159,38 @@ export function resolveTemplateImport(
 export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
   const [templates, setTemplates] = useState<SplitTemplate[]>([]);
 
-  // Load templates from localStorage on mount
+  // Load templates from localStorage on mount and sync across tabs
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setTemplates(JSON.parse(stored));
+    const load = () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          setTemplates(JSON.parse(stored));
+        }
+      } catch {
+        // Ignore parse errors
       }
-    } catch {
-      // Ignore parse errors
-    }
-  }, []);
+    };
 
-  // Save templates to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-  }, [templates]);
+    load();
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        if (e.newValue) {
+          try {
+            setTemplates(JSON.parse(e.newValue));
+          } catch {}
+        } else {
+          setTemplates([]);
+        }
+      } else if (e.key === null) {
+        setTemplates([]);
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   const saveTemplate = (name: string, rows: TemplateRow[]) => {
     const now = Date.now();
@@ -185,24 +201,69 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
       createdAt: now,
       updatedAt: now,
     };
-    setTemplates((prev) => [...prev, newTemplate]);
+    setTemplates((prev: SplitTemplate[]) => {
+      let currentStore = prev;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) currentStore = parsed;
+        }
+      } catch {}
+      const next = [...currentStore, newTemplate];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
     return newTemplate;
   };
 
   const renameTemplate = (id: string, name: string) => {
-    setTemplates((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, name, updatedAt: Date.now() } : t)),
-    );
+    setTemplates((prev: SplitTemplate[]) => {
+      let currentStore = prev;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) currentStore = parsed;
+        }
+      } catch {}
+      const next = currentStore.map((t) =>
+        t.id === id ? { ...t, name, updatedAt: Date.now() } : t,
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   const deleteTemplate = (id: string) => {
-    setTemplates((prev) => prev.filter((t) => t.id !== id));
+    setTemplates((prev: SplitTemplate[]) => {
+      let currentStore = prev;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) currentStore = parsed;
+        }
+      } catch {}
+      const next = currentStore.filter((t) => t.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   const duplicateTemplate = (id: string) => {
-    setTemplates((prev) => {
-      const original = prev.find((t) => t.id === id);
-      if (!original) return prev;
+    setTemplates((prev: SplitTemplate[]) => {
+      let currentStore = prev;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) currentStore = parsed;
+        }
+      } catch {}
+
+      const original = currentStore.find((t) => t.id === id);
+      if (!original) return currentStore;
       const now = Date.now();
       const copy: SplitTemplate = {
         ...original,
@@ -211,7 +272,9 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now,
       };
-      return [...prev, copy];
+      const next = [...currentStore, copy];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
     });
   };
 
@@ -230,6 +293,7 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     // Throws on invalid JSON / shape (see resolveTemplateImport) so the
     // caller can show a real error instead of a silent no-op.
     const result = resolveTemplateImport(templates, json, overwriteConflicts);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(result.next));
     setTemplates(result.next);
     return { imported: result.imported, skipped: result.skipped, conflicts: result.conflicts };
   };

@@ -31,8 +31,8 @@ export const useNameWatchlistStore = create<NameWatchlistState>()(
     (set) => ({
       watchedAuctions: [],
       bids: {},
-      watchAuction: (auction) =>
-        set((state) => {
+      watchAuction: (auction: WatchedNameAuction) =>
+        set((state: NameWatchlistState) => {
           const name = normalizeName(auction.name);
           return {
             watchedAuctions: [
@@ -41,26 +41,26 @@ export const useNameWatchlistStore = create<NameWatchlistState>()(
             ],
           };
         }),
-      unwatchAuction: (name) =>
-        set((state) => ({
+      unwatchAuction: (name: string) =>
+        set((state: NameWatchlistState) => ({
           watchedAuctions: state.watchedAuctions.filter(
             (item) => item.name !== normalizeName(name),
           ),
         })),
-      saveBid: (bid) =>
-        set((state) => {
+      saveBid: (bid: LocalAuctionBid) =>
+        set((state: NameWatchlistState) => {
           const name = normalizeName(bid.name);
           return { bids: { ...state.bids, [name]: { ...bid, name } } };
         }),
-      markBidRevealed: (name) =>
-        set((state) => {
+      markBidRevealed: (name: string) =>
+        set((state: NameWatchlistState) => {
           const key = normalizeName(name);
           const bid = state.bids[key];
           if (!bid) return state;
           return { bids: { ...state.bids, [key]: { ...bid, revealed: true } } };
         }),
-      removeBid: (name) =>
-        set((state) => {
+      removeBid: (name: string) =>
+        set((state: NameWatchlistState) => {
           const bids = { ...state.bids };
           delete bids[normalizeName(name)];
           return { bids };
@@ -69,3 +69,17 @@ export const useNameWatchlistStore = create<NameWatchlistState>()(
     { name: 'wraith-name-auction-watchlist' },
   ),
 );
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'wraith-name-auction-watchlist') {
+      if (e.newValue) {
+        useNameWatchlistStore.persist.rehydrate();
+      } else {
+        useNameWatchlistStore.setState({ watchedAuctions: [], bids: {} });
+      }
+    } else if (e.key === null) {
+      useNameWatchlistStore.setState({ watchedAuctions: [], bids: {} });
+    }
+  });
+}
