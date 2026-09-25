@@ -326,8 +326,8 @@ export async function verifyPasskeyAssertion(
     options.publicKeyAlgorithm === -7
       ? { name: 'ECDSA', namedCurve: 'P-256' }
       : options.publicKeyAlgorithm === -257
-      ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
-      : null;
+        ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
+        : null;
   if (!keyAlgorithm)
     throw new PasskeyError('The passkey uses an unsupported key algorithm.', 'GET_FAILED');
 
