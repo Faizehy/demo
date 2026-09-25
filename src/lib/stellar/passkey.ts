@@ -24,7 +24,11 @@ export const PASSKEY_PUBLIC_KEY_ALGORITHM_STORAGE_KEY = 'wraith:passkey:publicKe
 export const PASSKEY_SIGN_COUNT_STORAGE_KEY = 'wraith:passkey:signCount';
 
 export type PasskeyErrorCode =
-  'PRF_UNSUPPORTED' | 'NO_CREDENTIAL' | 'USER_REJECTED' | 'CREATE_FAILED' | 'GET_FAILED';
+  | 'PRF_UNSUPPORTED'
+  | 'NO_CREDENTIAL'
+  | 'USER_REJECTED'
+  | 'CREATE_FAILED'
+  | 'GET_FAILED';
 
 export class PasskeyError extends Error {
   constructor(
@@ -322,8 +326,8 @@ export async function verifyPasskeyAssertion(
     options.publicKeyAlgorithm === -7
       ? { name: 'ECDSA', namedCurve: 'P-256' }
       : options.publicKeyAlgorithm === -257
-        ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
-        : null;
+      ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
+      : null;
   if (!keyAlgorithm)
     throw new PasskeyError('The passkey uses an unsupported key algorithm.', 'GET_FAILED');
 
