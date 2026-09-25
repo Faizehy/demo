@@ -1,5 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-interface Contact {
+import {
+  isBoundedString,
+  isFiniteTimestamp,
+  readVersionedCollection,
+  writeVersioned,
+} from '../lib/versionedStorage';
+
+export interface Contact {
+
   address: string;
   name: string;
   addedAt: number;
@@ -17,52 +25,61 @@ const ContactsContext = createContext<ContactsContextValue | null>(null);
 
 const STORAGE_KEY = 'wraith-contacts';
 
+function isContact(value: unknown): value is Contact {
+  if (typeof value !== 'object' || value === null) return false;
+  const contact = value as Record<string, unknown>;
+  return (
+    isBoundedString(contact.address, 512) &&
+    contact.address.length > 0 &&
+    isBoundedString(contact.name, 200) &&
+    isFiniteTimestamp(contact.addedAt)
+  );
+}
+
 export function ContactsProvider({ children }: { children: ReactNode }) {
   const [contacts, setContacts] = useState<Contact[]>([]);
 
   // Load contacts from localStorage on mount and sync across tabs
   useEffect(() => {
+  useEffect(() => {
     const load = () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          setContacts(JSON.parse(stored));
-        }
+        // Use the new versioned reader
+        setContacts(readVersionedCollection(localStorage, STORAGE_KEY, isContact));
       } catch {
         // Ignore parse errors
       }
     };
-
+    
     load();
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         if (e.newValue) {
           try {
-            const incoming = JSON.parse(e.newValue) as Contact[];
+            // Read the latest state using the versioned reader
+            const incoming = readVersionedCollection(localStorage, STORAGE_KEY, isContact);
             setContacts((prev: Contact[]) => {
-              // Merge changes, favoring incoming (which is the latest saved state),
-              // while keeping any local contacts that might have been added concurrently.
+              // Merge changes, favoring incoming (which is the latest saved state)
               const map = new Map<string, Contact>();
-              prev.forEach((c) => map.set(c.address, c));
-              incoming.forEach((c) => {
+              prev.forEach(c => map.set(c.address, c));
+              incoming.forEach(c => {
                 const existing = map.get(c.address);
                 if (!existing || existing.addedAt <= c.addedAt) {
                   map.set(c.address, c);
                 }
               });
-
+              
               const next = Array.from(map.values());
-              if (JSON.stringify(next) !== e.newValue) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+              // If our merged state differs from what's on disk, write it back
+              if (JSON.stringify(next) !== JSON.stringify(incoming)) {
+                writeVersioned(localStorage, STORAGE_KEY, next);
               }
               return next;
             });
           } catch {
             // Ignore
           }
-        } else {
-          setContacts([]);
         }
       } else if (e.key === null) {
         // LocalStorage cleared
@@ -79,17 +96,19 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
       // Merge with latest from storage to avoid overwriting other tabs' additions
       let currentStore = prev;
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) currentStore = parsed;
-        }
+        currentStore = readVersionedCollection(localStorage, STORAGE_KEY, isContact);
       } catch {}
 
       const filtered = currentStore.filter((c) => c.address !== address);
       const next = [...filtered, { address, name, addedAt: Date.now() }];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      
+      // Use the new versioned writer
+      writeVersioned(localStorage, STORAGE_KEY, next);
+      
       return next;
+    });
+  }, []);
+
     });
   }, []);
 

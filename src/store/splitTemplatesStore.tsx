@@ -1,4 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  isBoundedString,
+  isFiniteTimestamp,
+  readVersionedCollection,
+  writeVersioned,
+} from '../lib/versionedStorage';
 
 export interface TemplateRow {
   metaAddress: string;
@@ -56,9 +62,10 @@ function isValidTemplateRow(value: unknown): value is TemplateRow {
   if (typeof value !== 'object' || value === null) return false;
   const row = value as Record<string, unknown>;
   return (
-    typeof row.metaAddress === 'string' &&
-    typeof row.amountRaw === 'string' &&
-    (row.memo === undefined || typeof row.memo === 'string')
+    isBoundedString(row.metaAddress, 512) &&
+    row.metaAddress.length > 0 &&
+    isBoundedString(row.amountRaw, 128) &&
+    (row.memo === undefined || isBoundedString(row.memo, 256))
   );
 }
 
@@ -66,13 +73,14 @@ export function isValidTemplate(value: unknown): value is SplitTemplate {
   if (typeof value !== 'object' || value === null) return false;
   const t = value as Record<string, unknown>;
   return (
-    typeof t.id === 'string' &&
+    isBoundedString(t.id, 128) &&
     t.id.length > 0 &&
-    typeof t.name === 'string' &&
+    isBoundedString(t.name, 200) &&
     Array.isArray(t.rows) &&
+    t.rows.length <= 100 &&
     t.rows.every(isValidTemplateRow) &&
-    typeof t.createdAt === 'number' &&
-    typeof t.updatedAt === 'number'
+    isFiniteTimestamp(t.createdAt) &&
+    isFiniteTimestamp(t.updatedAt)
   );
 }
 
@@ -161,24 +169,37 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
 
   // Load templates from localStorage on mount and sync across tabs
   useEffect(() => {
+  useEffect(() => {
+    // Define the extractor function that develop branch added
+    const extractTemplates = (value: unknown) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'object' && value !== null) {
+        const envelope = value as { templates?: unknown };
+        return Array.isArray(envelope.templates) ? envelope.templates : undefined;
+      }
+      return undefined;
+    };
+
     const load = () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          setTemplates(JSON.parse(stored));
-        }
+        setTemplates(
+          readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates)
+        );
       } catch {
         // Ignore parse errors
       }
     };
-
+    
     load();
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         if (e.newValue) {
           try {
-            setTemplates(JSON.parse(e.newValue));
+            // Use the versioned reader when the storage event fires
+            setTemplates(
+              readVersionedCollection(localStorage, STORAGE_KEY, isValidTemplate, extractTemplates)
+            );
           } catch {}
         } else {
           setTemplates([]);
@@ -191,6 +212,7 @@ export function SplitTemplatesProvider({ children }: { children: ReactNode }) {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
 
   const saveTemplate = (name: string, rows: TemplateRow[]) => {
     const now = Date.now();
