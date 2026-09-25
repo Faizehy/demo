@@ -7,7 +7,6 @@ import {
 } from '../lib/versionedStorage';
 
 export interface Contact {
-
   address: string;
   name: string;
   addedAt: number;
@@ -41,7 +40,6 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
 
   // Load contacts from localStorage on mount and sync across tabs
   useEffect(() => {
-  useEffect(() => {
     const load = () => {
       try {
         // Use the new versioned reader
@@ -50,7 +48,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
         // Ignore parse errors
       }
     };
-    
+
     load();
 
     const handleStorage = (e: StorageEvent) => {
@@ -62,14 +60,14 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
             setContacts((prev: Contact[]) => {
               // Merge changes, favoring incoming (which is the latest saved state)
               const map = new Map<string, Contact>();
-              prev.forEach(c => map.set(c.address, c));
-              incoming.forEach(c => {
+              prev.forEach((c) => map.set(c.address, c));
+              incoming.forEach((c) => {
                 const existing = map.get(c.address);
                 if (!existing || existing.addedAt <= c.addedAt) {
                   map.set(c.address, c);
                 }
               });
-              
+
               const next = Array.from(map.values());
               // If our merged state differs from what's on disk, write it back
               if (JSON.stringify(next) !== JSON.stringify(incoming)) {
@@ -101,10 +99,10 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
 
       const filtered = currentStore.filter((c) => c.address !== address);
       const next = [...filtered, { address, name, addedAt: Date.now() }];
-      
+
       // Use the new versioned writer
       writeVersioned(localStorage, STORAGE_KEY, next);
-      
+
       return next;
     });
   }, []);
