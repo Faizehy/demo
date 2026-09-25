@@ -46,6 +46,43 @@ describe('Multi-tab synchronization', () => {
     expect(result.current.contacts).toEqual([]);
   });
 
+  it('synchronizes deletions between tabs', () => {
+    const { result } = renderHook(() => useContacts(), { wrapper: ContactsProvider });
+
+    const newContacts = [
+      { address: 'G123', name: 'Alice', addedAt: Date.now() },
+      { address: 'G456', name: 'Bob', addedAt: Date.now() },
+    ];
+
+    // Simulate initial setup from another tab
+    act(() => {
+      localStorage.setItem('wraith-contacts', JSON.stringify(newContacts));
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'wraith-contacts',
+          newValue: JSON.stringify(newContacts),
+        }),
+      );
+    });
+
+    expect(result.current.contacts).toEqual(newContacts);
+
+    // Simulate another tab deleting a contact
+    const deletedContacts = [newContacts[1]]; // keeps Bob, deletes Alice
+
+    act(() => {
+      localStorage.setItem('wraith-contacts', JSON.stringify(deletedContacts));
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'wraith-contacts',
+          newValue: JSON.stringify(deletedContacts),
+        }),
+      );
+    });
+
+    expect(result.current.contacts).toEqual(deletedContacts);
+  });
+
   it('synchronizes scan strategy between tabs', () => {
     const { result } = renderHook(() => useScanStrategy(), { wrapper: ScanStrategyProvider });
 

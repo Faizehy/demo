@@ -57,27 +57,13 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
           try {
             // Read the latest state using the versioned reader
             const incoming = readVersionedCollection(localStorage, STORAGE_KEY, isContact);
-            setContacts((prev: Contact[]) => {
-              // Merge changes, favoring incoming (which is the latest saved state)
-              const map = new Map<string, Contact>();
-              prev.forEach((c) => map.set(c.address, c));
-              incoming.forEach((c) => {
-                const existing = map.get(c.address);
-                if (!existing || existing.addedAt <= c.addedAt) {
-                  map.set(c.address, c);
-                }
-              });
-
-              const next = Array.from(map.values());
-              // If our merged state differs from what's on disk, write it back
-              if (JSON.stringify(next) !== JSON.stringify(incoming)) {
-                writeVersioned(localStorage, STORAGE_KEY, next);
-              }
-              return next;
-            });
+            setContacts(incoming);
           } catch {
             // Ignore
           }
+        } else {
+          // Key was removed
+          setContacts([]);
         }
       } else if (e.key === null) {
         // LocalStorage cleared
