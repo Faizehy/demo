@@ -7,6 +7,9 @@ import {
   useScanStrategy,
   DEFAULT_SCAN_STRATEGY,
 } from '../context/ScanStrategyContext';
+import { SplitTemplatesProvider, useSplitTemplates } from './splitTemplatesStore';
+import { useNameWatchlistStore } from './nameWatchlistStore';
+import { useStealthLabels } from '../hooks/useStealthLabels';
 
 describe('Multi-tab synchronization', () => {
   beforeEach(() => {
@@ -112,5 +115,118 @@ describe('Multi-tab synchronization', () => {
     });
 
     expect(result.current.strategy).toBe(DEFAULT_SCAN_STRATEGY);
+  });
+
+  it('synchronizes templates between tabs', () => {
+    const { result } = renderHook(() => useSplitTemplates(), { wrapper: SplitTemplatesProvider });
+
+    expect(result.current.templates).toEqual([]);
+
+    const newTemplates = [{ id: 'tpl_1', name: 'Test', rows: [], createdAt: 1, updatedAt: 1 }];
+
+    act(() => {
+      localStorage.setItem(
+        'wraith-split-templates',
+        JSON.stringify({ version: 1, type: 'wraith-versioned-collection', data: newTemplates }),
+      );
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'wraith-split-templates',
+          newValue: JSON.stringify({
+            version: 1,
+            type: 'wraith-versioned-collection',
+            data: newTemplates,
+          }),
+        }),
+      );
+    });
+
+    expect(result.current.templates).toEqual(newTemplates);
+  });
+
+  it('synchronizes watchlists between tabs', () => {
+    const { result } = renderHook(() => useNameWatchlistStore());
+
+    expect(result.current.watchedAuctions).toEqual([]);
+
+    const payload = { watchedAuctions: [{ name: 'test.xlm', endsAt: 1 }], bids: {} };
+
+    act(() => {
+      const storageState = JSON.stringify({
+        version: 1,
+        type: 'wraith-versioned-value',
+        data: payload,
+      });
+      localStorage.setItem('wraith-name-auction-watchlist', storageState);
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'wraith-name-auction-watchlist',
+          newValue: storageState,
+        }),
+      );
+    });
+
+    expect(result.current.watchedAuctions.length).toBe(1);
+    expect(result.current.watchedAuctions[0].name).toBe('test.xlm');
+  });
+
+  it('synchronizes wallet labels between tabs', () => {
+    const { result } = renderHook(() => useStealthLabels('PUB1'));
+
+    expect(result.current.labels).toEqual({});
+
+    const label = { stealthAddress: 'st1', label: 'My Label', tags: [], createdAt: 1 };
+
+    act(() => {
+      localStorage.setItem('PUB1:st1', JSON.stringify(label));
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'PUB1:st1',
+          newValue: JSON.stringify(label),
+        }),
+      );
+    });
+
+    expect(result.current.labels['st1']).toEqual(label);
+  });
+
+  it('handles global clear-data correctly across all states', () => {
+    const { result: contactsRes } = renderHook(() => useContacts(), { wrapper: ContactsProvider });
+    const { result: templatesRes } = renderHook(() => useSplitTemplates(), {
+      wrapper: SplitTemplatesProvider,
+    });
+    const { result: watchlistRes } = renderHook(() => useNameWatchlistStore());
+    const { result: labelsRes } = renderHook(() => useStealthLabels('PUB1'));
+
+    // Set initial data
+    act(() => {
+      contactsRes.current.addContact('G123', 'Alice');
+      templatesRes.current.saveTemplate('Test', []);
+      watchlistRes.current.watchAuction({ name: 'test.xlm', endsAt: 1 });
+      labelsRes.current.saveLabel('st1', 'My Label', []);
+    });
+
+    // Verify data exists
+    expect(contactsRes.current.contacts.length).toBeGreaterThan(0);
+    expect(templatesRes.current.templates.length).toBeGreaterThan(0);
+    expect(watchlistRes.current.watchedAuctions.length).toBeGreaterThan(0);
+    expect(Object.keys(labelsRes.current.labels).length).toBeGreaterThan(0);
+
+    // Simulate clear data (logout)
+    act(() => {
+      localStorage.clear();
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: null,
+          newValue: null,
+        }),
+      );
+    });
+
+    // Everything should be empty
+    expect(contactsRes.current.contacts).toEqual([]);
+    expect(templatesRes.current.templates).toEqual([]);
+    expect(watchlistRes.current.watchedAuctions).toEqual([]);
+    expect(labelsRes.current.labels).toEqual({});
   });
 });
